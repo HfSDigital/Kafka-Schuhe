@@ -58,6 +58,7 @@ public:
 	// ---------------------------------------------------------
 
 	// PINS
+#ifdef OLD_VERSION
 	const int MOTOR_A_SPEED = D8;
 	const int MOTOR_A_DIR2 = D7;
 	const int MOTOR_A_DIR1 = D6;
@@ -65,4 +66,14 @@ public:
 	const int MOTOR_B_DIR1 = D4;
 	const int MOTOR_B_DIR2 = D3;
 	const int MOTOR_B_SPEED = D2;
+#else
+	const int MOTOR_A_SPEED = D8;
+	const int MOTOR_A_DIR2 = D7;
+	const int MOTOR_A_DIR1 = D6;
+	const int STBY = D5;
+	const int MOTOR_B_DIR1 = D3;
+	const int MOTOR_B_DIR2 = D2;
+	const int MOTOR_B_SPEED = D1;
+#endif
+	
 };

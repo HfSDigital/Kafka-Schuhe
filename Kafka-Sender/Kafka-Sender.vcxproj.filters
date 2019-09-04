@@ -24,7 +24,7 @@
     <ClInclude Include="__vm\.Sender.vsarduino.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\Receiver\pw.h">
+    <ClInclude Include="pw.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

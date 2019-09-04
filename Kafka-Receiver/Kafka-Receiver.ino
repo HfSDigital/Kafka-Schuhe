@@ -10,6 +10,8 @@
 	the onboard-LED blinks fast. This will erase EEPROM.
 
 */
+#define USE_SOFTAP
+#define OLD_VERSION
 
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
@@ -17,7 +19,18 @@
 #include "pw.h"
 #include "TB6612FNG.h"
 
-#define LED_ESP D4
+
+#define LED_WIFI_OK D4
+#define LED_BATTERY_LOW 10
+#define LED_BATTERY_OK 9
+
+#ifndef USE_SOFTAP
+	IPAddress staticIP(192, 168, 234, 100); //ESP static ip
+	IPAddress gateway(192, 168, 234, 1);   //IP Address of your WiFi Router (Gateway)
+	IPAddress subnet(255, 255, 255, 0);  //Subnet mask
+	IPAddress dns(8, 8, 8, 8);  //DNS
+	const char* deviceName = "SHOE_A";
+#endif // !USE_SOFTAP
 
 
 
@@ -32,39 +45,74 @@ const unsigned int destPort = 9000;
 // Motor -------------------------------------------------------------
 tb6612fng motors;
 
-
-
+// Status Monitoring -------------------------------------------------------------
+bool WIFI_OK = false;
 
 //-------------------------------------------------------------
 
 void setup() {
 	Serial.begin(115200);
 
-	pinMode(LED_ESP, OUTPUT);       // ESP8266 LED - 2, D4, LED_ESP
-	pinMode(LED_BUILTIN, OUTPUT);   // NodeMCU LED - 16, D0, LED_BUILTIN, BUILTIN_LED
+	pinMode(LED_WIFI_OK, OUTPUT);       // ESP8266 LED - 2, D4, LED_ESP
+	pinMode(LED_BATTERY_OK, OUTPUT);   // NodeMCU LED - 16, D0, LED_BUILTIN, BUILTIN_LED
+	pinMode(LED_BATTERY_LOW, OUTPUT);   // NodeMCU LED - 16, D0, LED_BUILTIN, BUILTIN_LED
 
-	digitalWrite(LED_ESP, HIGH);	// Turn ESP's tiny LED off at startup (anyway, that pin is used for the tb6612fng
-	digitalWrite(LED_BUILTIN, LOW);	// turn IR and Control-LED ON at startup!
+	// turn off all LEDs
+	digitalWrite(LED_WIFI_OK, HIGH);
+	digitalWrite(LED_BATTERY_OK, LOW);
+	digitalWrite(LED_BATTERY_LOW, LOW);
+	digitalWrite(D0, HIGH);
 
+	#ifndef  OLD_VERSION
+		checkVoltage();
+	#endif // ! OLD_VERSION
+
+
+
+#ifdef USE_SOFTAP
 	// Create Soft-AP
 	// ---------------
 	WiFi.mode(WIFI_AP);
 	// The network established by softAP will have default IP address of 192.168.4.1. 
 	// This address may be changed using softAPConfig: https://arduino-esp8266.readthedocs.io/en/latest/esp8266wifi/soft-access-point-class.html
-	while (WiFi.softAP(ssid, password, softAPChannel, true /*ssid_hidden*/, 1 /*max_connection*/) == false) {
+	while (WiFi.softAP(ssid, password, softAPChannel, true /*ssid_hidden*/, 4 /*max_connection*/) == false) {
 		Serial.println("SoftAP start failed");
 		delay(500);
 	}
-	
-	Udp.begin(localPort);
+
 	Serial.println();
 	Serial.print("SoftAP started with IP address ");
 	Serial.println(WiFi.softAPIP());
-	Serial.print("Listening at port: ");
-	Serial.println(Udp.localPort());
-	
+#else
+	// Connect to WiFi
+	// ---------------
+	Serial.println("");
+	Serial.print("Connecting to ");
+	Serial.println(ssid);
+
+	WiFi.disconnect();				//Prevent connecting to wifi based on previous configuration
+	WiFi.hostname(deviceName);      // DHCP Hostname (useful for finding device for static lease)
+	WiFi.config(staticIP, subnet, gateway, dns);
+	WiFi.begin(ssid, password);
+	WiFi.mode(WIFI_STA); //WiFi mode station (connect to wifi router only
+
+	// Wait for connection
+	while (WiFi.status() != WL_CONNECTED) {
+		digitalWrite(LED_WIFI_OK, HIGH);
+		delay(100);
+		digitalWrite(LED_WIFI_OK, LOW);
+		delay(100);
+		Serial.print(".");
+	}
 	Serial.print("local IP address: ");
 	Serial.println(WiFi.localIP());
+
+#endif // USE_SOFTAP
+
+
+	Udp.begin(localPort);
+	Serial.print("Listening at port: ");
+	Serial.println(Udp.localPort());
 
 	motors.initPins();
 }
@@ -72,6 +120,27 @@ void setup() {
 //-------------------------------------------------------------
 
 void loop() {
+	#ifndef USE_SOFTAP
+		// check WiFi-Connection
+		if (WiFi.status() != WL_CONNECTED) {
+			motors.stop();
+			digitalWrite(LED_WIFI_OK, HIGH);
+			delay(100);
+			digitalWrite(LED_WIFI_OK, LOW);
+			delay(100);
+			Serial.print("WiFi.status != WL_CONNECTED - ");
+			Serial.println(WiFi.status());
+		}
+		else {
+			digitalWrite(LED_WIFI_OK, LOW);
+		}
+	#endif // !USE_SOFTAP
+
+	#ifndef  OLD_VERSION
+		checkVoltage();
+	#endif // ! OLD_VERSION
+
+	// receive and route OSC Messages
 	OSCMessage msgIN;
 	int size;
 	if ((size = Udp.parsePacket()) > 0)
@@ -80,99 +149,42 @@ void loop() {
 			msgIN.fill(Udp.read());
 		}
 		if (!msgIN.hasError()) {
-			//msgIN.route("/pair/request", pair);
-			//msgIN.route("/1/toggleLED", toggleOnOff);
-			//msgIN.route("/1/firstStep", firstStep);
 			msgIN.route("/1/drive", drive);
 			msgIN.route("/1/stop", stop);
 		}
 	}
-
-
-	//if (!outIp.fromString("192.168.4.2"))
-	//{
-	//	Serial.println("can't parse IP-Address. Pairing failed.");
-	//	return;
-	//}
-
-	//OSCMessage msg("/pair/accept");
-	//msg.add("test");
-	//Udp.beginPacket(outIp, destPort);
-	//msg.send(Udp);
-	//Udp.endPacket();
-	//msg.empty();
-
-	//delay(500);
+	delay(20);
 }
 
-//-------------------------------------------------------------
+void checkVoltage()
+{
+	// check voltage on A0
+	int voltage = analogRead(A0);
 
-void toggleOnOff(OSCMessage &msg, int addrOffset) {
-	int ledState = (boolean)msg.getInt(0);
-	Serial.print("LED_State: ");
-	Serial.println(ledState);
-	digitalWrite(LED_BUILTIN, !ledState);
-	//digitalWrite(LED_ESP, ledState);
-	//digitalWrite(LED_IR, ledState);
+	if (voltage > 840) // battery good. ca. 11.1V = 3.7V / Cell
+	{	
+		digitalWrite(LED_BATTERY_OK, HIGH);
+		digitalWrite(LED_BATTERY_LOW, LOW);
+	}
+	else if (voltage > 730) // battery ok'ish. ca. 9.6V = 3.2V / Cell
+	{
+		digitalWrite(LED_BATTERY_OK, LOW);
+		digitalWrite(LED_BATTERY_LOW, HIGH);
+	}
+	else // deep sleep, battery needs to be changed
+	{
+		motors.stop();
+		Serial.println("Going to deepSleep");
+		digitalWrite(LED_BATTERY_OK, LOW);
+		for (int i = 0; i < 10; i++) {
+			digitalWrite(LED_BATTERY_LOW, HIGH);
+			delay(100);
+			digitalWrite(LED_BATTERY_LOW, LOW);
+			delay(100);
+		}
+		ESP.deepSleep(0);
+	}
 }
-
-/*-------------------------------------------------------------
-void pair(OSCMessage &msg, int addrOffset);
-/*-------------------------------------------------------------
-This function is called when the remote computer wants to pair. To do that,
-the remote computer needs to broadcast an OSC-Message to the OSC-address /pair/request
-
-The OSC-Message should contain the remote IP as a string in the format
-"192.168.12.123". If the IP gets parsed correctly, the
-client now knows the remote computers IP and can answer. (I didn't find a function
-to read the remote's IP from the OSC-Message, so I send it as a string)
-
-The answer goes to the address /pair/accept and contains the
-human readable name of the shoe as a string in the first argument.
-/*-------------------------------------------------------------*/
-//void pair(OSCMessage &msg, int addrOffset) {
-//	Serial.println("pair");
-//	if (msg.isString(0)) {
-//		int length = msg.getDataLength(0);
-//		char remoteIP[length];
-//		msg.getString(0, remoteIP, length);
-//
-//		if (!outIp.fromString(remoteIP))
-//		{
-//			Serial.println("can't parse IP-Address. Pairing failed.");
-//			return;
-//		}
-//
-//		OSCMessage msg("/pair/accept");
-//		msg.add(shoeName);
-//		Udp.beginPacket(outIp, destPort);
-//		msg.send(Udp);
-//		Udp.endPacket();
-//		msg.empty();
-//	}
-//}
-
-//
-//void firstStep(OSCMessage &msg, int addrOffset) {
-//	int duration = 100;
-//	int speed = 50;
-//	if (msg.isInt(0) && msg.isInt(1)) {
-//		duration = msg.getInt(0);
-//		speed = msg.getInt(1);
-//		Serial.print("duration to drive: ");
-//	}
-//	else
-//	{
-//		Serial.print("duration to drive set to default: ");
-//	}
-//	Serial.println(duration);
-//	Serial.println(speed);
-//
-//
-//	motors.drive(speed, speed);
-//	delay(duration);
-//	motors.stop();
-//}
 
 
 void stop(OSCMessage &msg, int addrOffset) {
@@ -203,3 +215,15 @@ void drive(OSCMessage &msg, int addrOffset) {
 	motors.drive(m1, m2);
 }
 
+
+// the map-function seems to be broken on floats
+float mapf(float x, float in_min, float in_max, float out_min, float out_max)
+{
+	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+// the abs-function seems to be broken on floats
+float absf(float val)
+{
+	return val > 0 ? val : val * -1;
+}
