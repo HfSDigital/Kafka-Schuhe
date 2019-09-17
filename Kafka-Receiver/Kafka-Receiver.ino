@@ -4,14 +4,10 @@
  Author:	Puppe
 */
 
-/*
 
-  - reset WiFi SSID and Password: press RST-Button shortly, release and press FLASH-Button until
-	the onboard-LED blinks fast. This will erase EEPROM.
 
-*/
-#define USE_SOFTAP
-#define OLD_VERSION
+//#define USE_SOFTAP
+//#define OLD_VERSION
 
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
@@ -23,6 +19,7 @@
 #define LED_WIFI_OK D4
 #define LED_BATTERY_LOW 10
 #define LED_BATTERY_OK 9
+#define LED_MESSAGE_RECEIVED D0
 
 #ifndef USE_SOFTAP
 	IPAddress staticIP(192, 168, 234, 100); //ESP static ip
@@ -47,6 +44,8 @@ tb6612fng motors;
 
 // Status Monitoring -------------------------------------------------------------
 bool WIFI_OK = false;
+bool ledMsgReceivedStatus = HIGH;
+unsigned long lastTimeLedMsgReceivedStatusChanged, ledMsgReceivedStatusInterval = 30;
 
 //-------------------------------------------------------------
 
@@ -56,18 +55,17 @@ void setup() {
 	pinMode(LED_WIFI_OK, OUTPUT);       // ESP8266 LED - 2, D4, LED_ESP
 	pinMode(LED_BATTERY_OK, OUTPUT);   // NodeMCU LED - 16, D0, LED_BUILTIN, BUILTIN_LED
 	pinMode(LED_BATTERY_LOW, OUTPUT);   // NodeMCU LED - 16, D0, LED_BUILTIN, BUILTIN_LED
-
+	pinMode(LED_MESSAGE_RECEIVED, OUTPUT);
+	
 	// turn off all LEDs
 	digitalWrite(LED_WIFI_OK, HIGH);
 	digitalWrite(LED_BATTERY_OK, LOW);
 	digitalWrite(LED_BATTERY_LOW, LOW);
-	digitalWrite(D0, HIGH);
+	digitalWrite(LED_MESSAGE_RECEIVED, LOW);
 
 	#ifndef  OLD_VERSION
 		checkVoltage();
 	#endif // ! OLD_VERSION
-
-
 
 #ifdef USE_SOFTAP
 	// Create Soft-AP
@@ -90,11 +88,11 @@ void setup() {
 	Serial.print("Connecting to ");
 	Serial.println(ssid);
 
-	WiFi.disconnect();				//Prevent connecting to wifi based on previous configuration
+	//WiFi.disconnect();				//Prevent connecting to wifi based on previous configuration
 	WiFi.hostname(deviceName);      // DHCP Hostname (useful for finding device for static lease)
-	WiFi.config(staticIP, subnet, gateway, dns);
-	WiFi.begin(ssid, password);
+	//WiFi.config(staticIP, subnet, gateway, dns);
 	WiFi.mode(WIFI_STA); //WiFi mode station (connect to wifi router only
+	WiFi.begin(ssid, password);
 
 	// Wait for connection
 	while (WiFi.status() != WL_CONNECTED) {
@@ -109,17 +107,27 @@ void setup() {
 
 #endif // USE_SOFTAP
 
-
 	Udp.begin(localPort);
 	Serial.print("Listening at port: ");
 	Serial.println(Udp.localPort());
 
 	motors.initPins();
+	
+	lastTimeLedMsgReceivedStatusChanged = millis();
 }
 
 //-------------------------------------------------------------
 
 void loop() {
+
+	// turn off the status LED for the "signal sent" status
+	if (millis() - lastTimeLedMsgReceivedStatusChanged > ledMsgReceivedStatusInterval)
+	{
+		ledMsgReceivedStatus = HIGH;
+	}
+	digitalWrite(LED_MESSAGE_RECEIVED, ledMsgReceivedStatus);
+
+
 	#ifndef USE_SOFTAP
 		// check WiFi-Connection
 		if (WiFi.status() != WL_CONNECTED) {
@@ -145,6 +153,9 @@ void loop() {
 	int size;
 	if ((size = Udp.parsePacket()) > 0)
 	{
+		lastTimeLedMsgReceivedStatusChanged = millis();
+		ledMsgReceivedStatus = LOW;
+
 		while (size--) {
 			msgIN.fill(Udp.read());
 		}
