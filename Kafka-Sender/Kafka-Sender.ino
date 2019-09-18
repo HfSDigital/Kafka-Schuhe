@@ -29,8 +29,8 @@
 #endif
 
 #ifdef JOYSTICK_V2
-#define JOYSTICK_AXIS_X A0
-#define JOYSTICK_AXIS_Y A3
+#define JOYSTICK_AXIS_X A0	// xAxis: throttle
+#define JOYSTICK_AXIS_Y A3	// yAxis: steering
 
 #define POTI_MAXSPEED A6
 #define POTI_STEERING_ADJUST A4
@@ -235,6 +235,7 @@ void loop() {
 #ifdef JOYSTICK_V2
 	if (!isCalibrated)
 	{
+		digitalWrite(LED_MSG_SENT, LOW);
 		delay(3000);
 		centerXAxis = analogRead(JOYSTICK_AXIS_X);
 		centerYAxis = analogRead(JOYSTICK_AXIS_Y);
@@ -243,18 +244,21 @@ void loop() {
 		Serial.print("\tcy: ");
 		Serial.println(centerYAxis);
 		isCalibrated = true;
+		digitalWrite(LED_MSG_SENT, HIGH);
 	}
 
 	float xAxis = 0, yAxis = 0;
 
-	float xA = analogRead(JOYSTICK_AXIS_X);
-	float yA = analogRead(JOYSTICK_AXIS_Y);
+	float xA = analogRead(JOYSTICK_AXIS_X);	// xAxis: throttle
+	float yA = analogRead(JOYSTICK_AXIS_Y);	// yAxis: steering
 
 	xAxis = (xA > centerXAxis) ? mapf(xA, centerXAxis, 4095, 0, 1.0) : mapf(xA, centerXAxis, 0, 0, -1.0);
 	yAxis = (yA > centerYAxis) ? mapf(yA, centerYAxis, 4095, 0, 1.0) : mapf(yA, centerYAxis, 0, 0, -1.0);
 
 	xAxis = constrain(mapf(xAxis, -0.5, 0.5, -1.0, 1.0), -1.0, 1.0);
 	yAxis = constrain(mapf(yAxis, -0.5, 0.5, -1.0, 1.0), -1.0, 1.0);
+
+	xAxis *= -1; // reverse throttle
 
 	if ((absf(yAxis) < tolerance) && (absf(xAxis) < tolerance) && isRunning) {
 		stop();
@@ -298,7 +302,6 @@ void stop()
 
 void drive(int m1, int m2)
 {
-#ifdef JOYSTICK_V1
 	int steeringAdjust = analogRead(POTI_STEERING_ADJUST);
 	steeringAdjust = map(steeringAdjust, 0, 4095, -25, 25);
 
@@ -306,7 +309,7 @@ void drive(int m1, int m2)
 	
 	m1 -= steeringAdjust;
 	m2 += steeringAdjust;
-#endif
+
 	m1 = constrain(m1, -100, 100);
 	m2 = constrain(m2, -100, 100);
 
