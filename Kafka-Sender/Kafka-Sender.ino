@@ -46,6 +46,7 @@
 #endif // !USE_SOFTAP
 
 // OSC-Stuff ----------------------------------------------------------
+String receiverIP = "192.168.234.223";
 IPAddress outIp;
 WiFiUDP Udp;
 const unsigned int localPort = 9000;
