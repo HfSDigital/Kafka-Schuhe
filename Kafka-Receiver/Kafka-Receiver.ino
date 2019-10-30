@@ -26,7 +26,7 @@ IPAddress staticIP(192, 168, 234, 100); //ESP static ip
 IPAddress gateway(192, 168, 234, 1);   //IP Address of your WiFi Router (Gateway)
 IPAddress subnet(255, 255, 255, 0);  //Subnet mask
 IPAddress dns(8, 8, 8, 8);  //DNS
-const char* deviceName = "SHOE_H";
+const char* deviceName = "SHOE_I";
 #endif // !USE_SOFTAP
 
 
