@@ -153,8 +153,9 @@ void loop() {
     Serial.print(",");
     Serial.println(-tolerance);
 
-    //xAxis *= -1; // reverse throttle
-
+    xAxis *= -1; // reverse throttle
+    yAxis *= -1;
+    
     if ((absf(yAxis) < tolerance) && (absf(xAxis) < tolerance) && isRunning) {
       stop();
     }
